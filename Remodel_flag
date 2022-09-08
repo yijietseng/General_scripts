@@ -1,0 +1,23 @@
+# Input setting 
+-in:file:s TclE_2.pdb   # input pdb
+-remodel:blueprint TclE_2.blueprint  # input blueprint file
+
+# run Setting
+-out:nstruct 5 # structures numbers
+#-run:chain A
+-remodel:num_trajectory 1
+-remodel:quick_and_dirty  # Setting this will no longer do additional refinement, to decrease run time
+-no_optH false
+
+# Considering extra rotameric angles
+-ex1
+-ex2                                          
+
+# Control output
+-out:path:all ./
+-out:file:scorefile test.sc       # Scoring file setting
+
+
+# cluster setting, use it when remodel:num_trajectory is greater than 1
+#-remodel:use_clusters true
+#-remodel:cluster_radius 9.0 
