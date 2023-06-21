@@ -185,6 +185,8 @@ def multi_sc(PDBpath, logpath='', buried=False, focus='', sheetName=''):
 			PDB = glob.glob(PDBpath+'*.pdb')
 		elif PDBpath[-1] != '/' and '*' in PDBpath:
 			PDB = glob.glob(PDBpath)
+	elif '.pdb' in PDBpath:
+		PDB = glob.glob(PDBpath)
 
 	elif '.txt' in PDBpath:
 		# or extract PDBs from a txt file
@@ -209,10 +211,6 @@ def multi_sc(PDBpath, logpath='', buried=False, focus='', sheetName=''):
 	#outputls.sort(reverse=True)
 	#print(outputls)
 	
-	df = pd.DataFrame()
-	pd.set_option('display.max_rows', 500)
-	pd.set_option('display.max_columns', 500)
-	pd.set_option('display.width', 1000)
 	# generate and append results in to a single dataframe
 	df = pd.DataFrame()
 	pd.set_option('display.max_rows', 500)
@@ -220,6 +218,7 @@ def multi_sc(PDBpath, logpath='', buried=False, focus='', sheetName=''):
 	pd.set_option('display.width', 1000)
 	for output in outputls:
 		df = df.append(output, ignore_index=True)
+		#df.loc[len(df)] = output
 	df = df.sort_index( axis=1)
 
 	print('\n\n\nRun completed!!!!')
@@ -286,7 +285,10 @@ def single_sc(PDBname, logpath='', focus='', sheetName='', buried=False):
 				return formatted_output
 		
 		else:
-			formatted_output = PDBname.split()+sc_score_output
+			#formatted_output = PDBname.split()+sc_score_output
+			formatted_output = {'APDBname':PDBname}
+			formatted_output.update(sc_score_output)
+
 			if logpath:
 				df = pd.DataFrame()
 				df = df.append(formatted_output, ignore_index=True)
@@ -302,41 +304,56 @@ def single_sc(PDBname, logpath='', focus='', sheetName='', buried=False):
 				return formatted_output
 
 	else:
-		sc_score = measure_sc(pose)
+		sc_score = {'SC':measure_sc(pose)}
 		if buried:
 			buried_sa = measure_buried_SA(pose)
-			formatted_output = PDBname.split()+sc_score_output+buried_sa
+			#formatted_output = PDBname.split()+sc_score+buried_sa
+			formatted_output = {'APDBname':PDBname}
+			formatted_output.update(sc_score)
+			formatted_output.update(buried_sa)
+
 			if logpath:
 				df = pd.DataFrame()
 				df = df.append(formatted_output, ignore_index=True)
-				df = df.sort_index( axis=1)
+				df = df.sort_index(axis=1)
 				write_DataFrame(logpath, df, sheetName)
-				print(f'SC score for {PDBname} is: {"  ".join(str(s) for s in list(sc_score_output.values()))}')
+				print(f'SC score for {PDBname} is: {"  ".join(str(s) for s in list(sc_score))}')
 				print(f'Calculated buried surface area is: {"  ".join(str(s) for s in list(buried_sa.values()))}')
 			
 				return formatted_output
+				#return df
 			
 			else:
-				print(f'SC score for {PDBname} is: {"  ".join(str(s) for s in list(sc_score_output.values()))}')
+				#df = pd.DataFrame(columns=['APDBname','SC'])
+				#df.loc[len(df)] = formatted_output
+				print(f'SC score for {PDBname} is: {"  ".join(str(s) for s in list(sc_score))}')
 				print(f'Calculated buried surface area is: {"  ".join(str(s) for s in list(buried_sa.values()))}')
 			
 				return formatted_output
+				#return df
 
 		else:
-			formatted_output = PDBname.split()+sc_score_output
+			#formatted_output = PDBname.split()+sc_score
+			formatted_output = {'APDBname':PDBname}
+			formatted_output.update(sc_score)
 			if logpath:
 				df = pd.DataFrame()
+				#df.loc[len(df)] = formatted_output
 				df = df.append(formatted_output, ignore_index=True)
 				df = df.sort_index( axis=1)
 				write_DataFrame(logpath, df, sheetName)
-				print(f'SC score for {PDBname} is: {"  ".join(str(s) for s in list(sc_score_output.values()))}')
+				print(f'SC score for {PDBname} is: {"  ".join(str(s) for s in list(sc_score))}')
 			
 				return formatted_output
+				#return df
 			
 			else:
-				print(f'SC score for {PDBname} is: {"  ".join(str(s) for s in list(sc_score_output.values()))}')
+				#df = pd.DataFrame(columns=['APDBname','SC'])
+				#df.loc[len(df)] = formatted_output
+				print(f'SC score for {PDBname} is: {"  ".join(str(s) for s in list(sc_score))}')
 			
 				return formatted_output
+				#return df
 
 
 def measure_buried_SA(pose, basechain='A', excluding_chain=[]):
