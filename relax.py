@@ -165,7 +165,7 @@ def main():
 
 	if args.generate_constraint:
 		if len(args.generate_constraint) == 3:
-			gen_cst(args.generate_constraint[0], args.generate_constraint[1], int(args.generate_constraint[2]))
+			gen_cst(args.generate_constraint[0], args.generate_constraint[1], float(args.generate_constraint[2]))
 		else:
 			gen_cst(args.generate_constraint[0], args.generate_constraint[1])
 
