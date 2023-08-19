@@ -66,17 +66,18 @@ def gen_cst(poseName, filename, weight=0.25):
 	print(f'Constraint file: {filepath} written')
 		
 
-def set_movemap(set_bb=True, set_chi=True, set_jump=False):
+def set_movemap(set_bb, set_chi, set_jump):
 	movemap = MoveMap()
 	movemap.set_bb(set_bb) 
 	movemap.set_chi(set_chi)
 	movemap.set_jump(set_jump)
+	print(movemap)
 	return movemap
 
 def RunRelax(sf, mmp, pose, apply=True):
 	relax = FastRelax()
 	relax.set_scorefxn(sf)
-	relax.set_movemap(mmp)
+
 	if apply:
 		relax.apply(pose)
 		return pose
@@ -95,7 +96,7 @@ def cal_wall_time(start, end):
 	return d
 
 
-def RunProcess(PDB, cst=''):
+def RunProcess(PDB, bb, chi, jump, cst=''):
 
 	pose = pose_from_pdb(PDB)
 	outputFN = format_outputFN(PDB)
@@ -105,7 +106,7 @@ def RunProcess(PDB, cst=''):
 	if cst:
 		set_cst(scorefxn, pose, cst)
 	# Set movemap
-	mmp = set_movemap()
+	mmp = set_movemap(set_bb=bb, set_chi=chi, set_jump=jump)
 	
 	# Run relax
 	score_before = scorefxn(pose)
@@ -151,6 +152,18 @@ parser.add_argument('-r',
 					nargs=1,
 					type=str,
 					help='Record a log file or not')
+parser.add_argument('--bb_off',
+					action='store_false',
+					help='''Turn backbone movemap off. No argument, the default is "on"
+							when this option is called on the commandline, backbone movemap is turned off''')
+parser.add_argument('--chi_off',
+					action='store_false',
+					help='''Turn sidechain movemap off. No argument, the default is "on"
+							when this option is called on the commandline, sidechain movemap is turned off''')
+parser.add_argument('--jump_off',
+					action='store_false',
+					help='''Turn jump movemap off. No argument, the default is "on"
+							when this option is called on the commandline, jump movemap is turned off''')						
 
 
 args = parser.parse_args()
@@ -162,6 +175,12 @@ def main():
 	#----------------------------Start timer--------------------------------
 	start = time.time()
 	#----------------------------Main function------------------------------
+	bb = args.bb_off
+	chi = args.chi_off
+	jump = args.jump_off
+
+	print(bb, chi, jump)
+	print(type(bb), type(chi), type(jump))
 
 	if args.generate_constraint:
 		if len(args.generate_constraint) == 3:
@@ -172,9 +191,9 @@ def main():
 	if args.input:
 		if os.path.isfile(args.input[0]):
 			if args.constraint:
-				score = RunProcess(args.input[0], cst=args.constraint[0])
+				score = RunProcess(args.input[0], bb, chi, jump, cst=args.constraint[0])
 			else:
-				score = RunProcess(args.input[0])
+				score = RunProcess(args.input[0], bb, chi, jump)
 
 			if args.record:
 				with open(args.record[0], 'a') as fin:
@@ -189,14 +208,24 @@ def main():
 			PDBls = glob.glob(args.input[0]+'*.pdb')
 
 			pool = mp.Pool(int(mp.cpu_count()*2/3))
+
+			mmplist = [bb, chi, jump]
 			if args.constraint:
 				cstls = []
 				for _ in range(len(PDBls)):
-					cstls.append(args.constraint[0])
-				combine_ls = list(zip(PDBls,cstls))
-				scores = pool.map(RunProcess, combine_ls)
+					cstls.append(args.constraint[0]) 
+				combine_ls = []
+				for i in PDBls:
+					combine_ls.append([i]+mmplist)
+				final_ls = []
+				for i in range(len(combine_ls)):
+					final_ls.append(combine_ls[i]+[cstls[i]])
+				scores = pool.starmap(RunProcess, final_ls)
 			else:
-				scores = pool.map(RunProcess, PDBls)
+				final_ls = []
+				for i in PDBls:
+					final_ls.append([i]+mmplist)
+				scores = pool.starmap(RunProcess, final_ls)
 
 			if args.record:
 				with open(args.record[0], 'a') as fin:
