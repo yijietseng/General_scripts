@@ -604,7 +604,6 @@ def prep_FDA_lig(input_smi, working_folder=None, filelimit=None, slurm_gen=False
     sys.exit('-----------------------\n[+] Done')
     
 
-
 def update_smi2pdbqt_slurm(max_array_No=None, name='submit_smi2pdbqt.sh'):
     with open(name, 'w') as fout:
         fout.write('#!/bin/bash\n\n')
@@ -644,8 +643,9 @@ def update_dock_slurm(mode='vs', email=None, max_array_No=None, working_folder=N
         
         # Later I found out that 100M usually sufficient, I leave the above code there just in case
         fout.write(f'#SBATCH --mem-per-cpu=1G   # memory per CPU core\n'
-                   f'#SBATCH -J "AD_{mode}"   # job name\n'
-                   f'#SBATCH --output={working_folder}/SLURM_OUT/slurm-%A_%a.out # Output everything into a temp folder\n')
+                   f'#SBATCH -J "AD_{mode}"   # job name\n')
+        if mode == 'vs':
+            fout.write(f'#SBATCH --output={working_folder}/SLURM_OUT/slurm-%A_%a.out # Output everything into a temp folder\n')
         if email:
             fout.write(f'#SBATCH --mail-user={email}   # email address\n'
                        '#SBATCH --mail-type=END\n')
@@ -668,15 +668,17 @@ def update_dock_slurm(mode='vs', email=None, max_array_No=None, working_folder=N
             elif max_array_No >= 5000:
                 fout.write('formatted_id=$(printf "%04d" "${SLURM_ARRAY_TASK_ID}")\n'
                            'file_path="$Working_folder/Ligands/Ligand_input_txt/LigGrp_$formatted_id.txt"\n\n')
-
+        elif mode == 'exp':
+            fout.write(f'Lig_array=($(ls {working_folder}/top_Ligands/*.pdbqt))\n\n')
         else:
             fout.write(f'Lig_array=($(ls {working_folder}/Ligands/*.pdbqt))\n\n')
-            
-        # Check for the existance of SLURM_OUT folder, if not create it.
-        fout.write('# Check existance of the temp slurm output folder, if not there, mkdir it.\n'
-                   'if [ ! -d "$Working_folder/SLURM_OUT" ]; then\n'
-                   '    mkdir -p "$Working_folder/SLURM_OUT"\n'
-                   'fi\n\n')
+        
+        if mode == 'vs':
+            # Check for the existance of SLURM_OUT folder, if not create it.
+            fout.write('# Check existance of the temp slurm output folder, if not there, mkdir it.\n'
+                    'if [ ! -d "$Working_folder/SLURM_OUT" ]; then\n'
+                    '    mkdir -p "$Working_folder/SLURM_OUT"\n'
+                    'fi\n\n')
                       
         # If Ligand count < 5000, then use the normal slurm array system
         if max_array_No < 5000:
@@ -744,7 +746,7 @@ def prep_input(RecpPDB=None, LigPDB=None):
             os.chdir('../../')
 
 
-def run_vina(RecepPDBQT:str, LigPDBQT:str=None, config=None, exhaustiveness=32, virtual_screen=False):
+def run_vina(RecepPDBQT:str, LigPDBQT:str=None, config=None, exhaustiveness=32, virtual_screen=False, mode=None):
     import pandas as pd
     
     vina = f'{software_folder}/vina'
@@ -814,17 +816,49 @@ def run_vina(RecepPDBQT:str, LigPDBQT:str=None, config=None, exhaustiveness=32, 
         stop_event.set()
         sys.stdout.write('-----------------------------\n[+] Completed')
         sys.stdout.flush()
-        
-        os.remove('core.*')
-
+        try:
+            os.remove('core.*')
+        except:
+            pass
         end = time.time()
     
         wall_time(start, end)
 
+    
+    elif mode == 'exp':
+        # submitting updated script using sbatch
+        print('[+] Initializing docking...')
+        try:
+            ID = subprocess.run(f'sbatch submit_autodock.sh {RecepPDBQT} {config}', shell=True, capture_output=True, text=True, check=True).stdout.strip()
+            slurm_job_ID = int(re.findall(r'\d+', ID)[0])
+            print(f'[+] Submitted batch job: {slurm_job_ID}')
+            print('[+] Performing explicit molecular docking...')
+        except subprocess.CalledProcessError as e:
+            print("Error submitting SLURM job:", e)
+            
+        stop_event = spinner()
+        
+        time.sleep(15)
+        task = subprocess.run(f"squeue -j {slurm_job_ID}", shell=True, capture_output=True, text=True, check=True).stdout.strip().split('\n')[1:]
+        print(f'[+] {len(task)} task remaining...')
+        
+        prev_task_length = len(task)
+        
+        while len(task) > 0:
+            time.sleep(15)
+            task = subprocess.run(f"squeue -j {slurm_job_ID}", shell=True, capture_output=True, text=True, check=True).stdout.strip().split('\n')[1:]
+            if len(task) != prev_task_length:
+                print(f'[+] {len(task)} task(s) remaining...', flush=True)
+                prev_task_length = len(task)  # Update the previous task length
+            
+        stop_event.set()
+        sys.stdout.write('[+] All docking processes are completed\n')
+        sys.stdout.flush()
         
     else:
+        # for single docking
         out_pdbqt = f'{working_folder}/output/{LigPDBQT.rsplit("/",1)[-1]}'
-        log = f'{working_folder}/logs/{LigPDBQT.rsplit("/",1)[-1][:-4]}.txt'
+        log = f'{working_folder}/logs/{LigPDBQT.rsplit("/",1)[-1][:-6]}.txt'
         
         os.system(f'{vina} --receptor {RecepPDBQT} --ligand {LigPDBQT} --config {config} --out {out_pdbqt} --log {log} --exhaustiveness {exhaustiveness}')
 
@@ -858,7 +892,7 @@ def get_tops(working_folder=None, top=10, result_file=None):
     print(f'[+] Top ligands are extracted to the: {top_dir}')
     
     
-def package(working_folder=None, tar_out=None, master=None, result_file=None):
+def package(working_folder=None, tar_out=None, master=None, result_file=None, output_struc=None):
     import getpass
     
     working_folder = working_folder.rsplit('/',1)[0]
@@ -867,14 +901,19 @@ def package(working_folder=None, tar_out=None, master=None, result_file=None):
     outFolder=f'/home/{username}/fsl_groups/grp_MolecularDock/autodock_result' 
 
     if master is None:
-        master_path = f'{working_folder}/master_ligand.pdbqt'
+        master_path = f'master_lig.pdbqt'
     else:
         master_path = shutil.move(master, working_folder) 
     if result_file is None:
-        result_path = f'{working_folder}/logs/Virtural_screen_result.out'
+        result_path = f'logs/'
     else:
         result_path = result_file
-    top_dir = f'{working_folder}/top_Ligands'
+    if output_struc is None:
+        output_path = f'output/'
+    else:
+        output_path = output_struc
+        
+    top_dir = f'top_Ligands/'
         
     # Create output folder
     if not os.path.exists(f'{outFolder}/{working_folder}'):
@@ -886,25 +925,42 @@ def package(working_folder=None, tar_out=None, master=None, result_file=None):
         os.chdir(working_folder)
         
         # Get new paths
-        result_path = shutil.move(result_path, working_folder).rsplit('/', 1)[-1]
-        master_path = master_path.rsplit('/',1)[-1]
-        top_dir = top_dir.rsplit('/', 1)[-1]
+        if not os.path.exists(f'{result_path.rsplit("/",1)[0]}'):
+            result_path = shutil.move(result_path, working_folder).rsplit('/', 1)[-1]
+        if not os.path.exists(f'{output_path.rsplit("/",1)[0]}'):
+            output_path = shutil.move(output_path, working_folder).rsplit('/', 1)[-1]
         
         # tar file
         if tar_out.split('.', 1)[-1] == 'tar.gz':
-            os.system(f'tar -czf {outFolder}/{working_folder}/{tar_out} {master_path} {top_dir} {result_path}')
+            os.system(f'tar -czf {outFolder}/{working_folder}/{tar_out} {master_path} {top_dir} {result_path} {output_path}')
         else:
-            os.system(f'tar -czf {outFolder}/{working_folder}/{tar_out}.tar.gz {master_path} {top_dir} {result_path}')
-        
+            os.system(f'tar -czf {outFolder}/{working_folder}/{tar_out}.tar.gz {master_path} {top_dir} {result_path} {output_path}')
+       
+        # remove the Ligands and files    
+        #shutil.rmtree(f'{working_folder}/Ligands/')
+        #shutil.rmtree(f'{top_dir}')
+        #os.remove(result_path)
+        #os.remove(master_path)
+        #os.remove(output_path)
+       
+       
         os.chdir(original_directory)
         
-        # remove the Ligands and files    
-        shutil.rmtree(f'{working_folder}/Ligands/')
-        shutil.rmtree(f'{top_dir}')
-        os.remove(result_path)
-        os.remove(master_path)
+        try:
+            os.mkdir(f'{working_folder}/Ligands')
+        except:
+            pass
+        try:
+            os.mkdir(f'{working_folder}/output')
+        except:    
+            pass
+        try:
+            os.mkdir(f'{working_folder}/logs')
+        except:
+            pass
         
-        os.mkdir(f'{working_folder}/Ligands/')
+        
+        
                         
     
 
@@ -933,6 +989,9 @@ parser.add_argument('-e',
                     type=int,
                     metavar='<int>',
                     help='Specify an exhaustiveness value, if not provided, 32 is set by default.')
+parser.add_argument('--explicit', 
+                    action='store_true',
+                    help='Turn on explicit docking mode, this is for testing purpose')
 parser.add_argument('-f',
                     '--file_incre',
                     nargs=1,
@@ -967,7 +1026,7 @@ parser.add_argument('-p',
                     help='Initiate input preparation including preparations for the ligands and receptor')
 parser.add_argument('--package', 
                     nargs="+",
-                    help='Package the top ligands, master_log.pdbqt and result log file. arguments: <working_folder> <tar_out> <master_file> <result_file>. If the master and the result files are not specified, it will use the default')
+                    help='Package the top ligands, master_log.pdbqt and result log file. arguments: <working_folder> <tar_out> <master_file> <result_file> <output_struct>. If the master and the result files are not specified, it will use the default')
 parser.add_argument("-r", 
                     '--receptor',
                     nargs=1,
@@ -1106,13 +1165,41 @@ def main():
                                          the coordinance of the center atom and the box size''')
         else:
             if args.virtual_screen:
+                # get email
+                with open('submit_autodock.sh', 'r') as fin:
+                    for line in fin:
+                        if 'email' in line:
+                            email = line.split('=')[-1].split('   # ')[0]
+                            
                 run_vina(RecepPDBQT=args.receptor[0], config=args.config[0], virtual_screen=True)
+                
+                # After the run, do another explicit docking with the top ligands
+                working_folder = args.receptor.rsplit('/',2)[0]
+                
+                top_ligs = glob.glob(f'{working_folder}/top_Ligands/*')
+                
+                update_dock_slurm(mode='exp', email=email ,max_array_No=len(top_ligs), working_folder=working_folder, exhaustiveness=256)
+                if not os.path.exists(f'{working_folder}/output'):
+                    os.mkdir(f'{working_folder}/output')
+                run_vina(RecepPDBQT=args.receptor[0], config=args.config[0], exhaustiveness=args.exhaustiveness[0], mode='exp')
             else:
                 if args.exhaustiveness:
                     run_vina(RecepPDBQT=args.receptor[0], LigPDBQT=args.ligand[0], config=args.config[0], exhaustiveness=args.exhaustiveness[0])
                 else:
                     run_vina(RecepPDBQT=args.receptor[0], LigPDBQT=args.ligand[0], config=args.config[0])
-                    
+    
+    if args.explicit:
+        
+        email = input('Please input your email: ').strip()
+        # After the run, do another explicit docking with the top ligands
+        working_folder = args.receptor[0].rsplit('/',2)[0]
+        if not os.path.exists(f'{working_folder}/top_Ligands'):
+            raise FileNotFoundError(f'{working_folder}/top_Ligands not found')
+        
+        top_ligs = glob.glob(f'{working_folder}/top_Ligands/*')
+        update_dock_slurm(mode='exp', email=email ,max_array_No=len(top_ligs), working_folder=working_folder, exhaustiveness=10)
+        run_vina(RecepPDBQT=args.receptor[0], config=args.config[0], exhaustiveness=args.exhaustiveness[0], mode='exp')
+    
     if args.get_tops:
         if len(args.get_tops) == 1:
             get_tops(working_folder=args.get_tops[0])
@@ -1122,8 +1209,10 @@ def main():
             get_tops(working_folder=args.get_tops[0], top=int(args.get_tops[1]), result_file=args.get_tops[2])
             
     if args.package:
-        if len(args.package) < 3:
+        if len(args.package) < 2:
             raise ValueError('Please enter <working_folder>, <tar_out>')
+        elif len(args.package) == 2:
+            package(args.package[0], args.package[1])
         elif len(args.package) == 3:
             package(args.package[0], args.package[1], args.package[2])
         elif len(args.package) == 4:
