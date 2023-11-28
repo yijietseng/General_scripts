@@ -646,6 +646,8 @@ def update_dock_slurm(mode='vs', email=None, max_array_No=None, working_folder=N
                    f'#SBATCH -J "AD_{mode}"   # job name\n')
         if mode == 'vs':
             fout.write(f'#SBATCH --output={working_folder}/SLURM_OUT/slurm-%A_%a.out # Output everything into a temp folder\n')
+        else:
+            fout.write(f'#SBATCH --output=/dev/null # Output everything into a temp folder\n')
         if email:
             fout.write(f'#SBATCH --mail-user={email}   # email address\n'
                        '#SBATCH --mail-type=END\n')
@@ -937,11 +939,11 @@ def package(working_folder=None, tar_out=None, master=None, result_file=None, ou
             os.system(f'tar -czf {outFolder}/{working_folder}/{tar_out}.tar.gz {master_path} {top_dir} {result_path} {output_path}')
        
         # remove the Ligands and files    
-        #shutil.rmtree(f'{working_folder}/Ligands/')
-        #shutil.rmtree(f'{top_dir}')
-        #os.remove(result_path)
-        #os.remove(master_path)
-        #os.remove(output_path)
+        shutil.rmtree(f'{working_folder}/Ligands/')
+        shutil.rmtree(f'{top_dir}')
+        os.remove(result_path)
+        os.remove(master_path)
+        os.remove(output_path)
        
        
         os.chdir(original_directory)
