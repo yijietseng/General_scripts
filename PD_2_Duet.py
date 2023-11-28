@@ -164,28 +164,39 @@ def main():
         n_ls.append(n_value)
     df_ID['literature_n'] = n_ls
 
-    # Calculate different charge states using vectorized operations
+    # Assume df_ID is your original DataFrame
+
+    # Calculate different charge states using iterative approach
     min_charge = 2
     max_charge = 6
 
-    # Create a DataFrame with multiple charge states
-    charge_states_df = pd.DataFrame(index=df_ID.index.repeat(max_charge - min_charge + 1))
+    # Create an empty list to store DataFrames for concatenation
+    dfs_to_concat = []
 
-    # Assign the charge states to the new DataFrame
-    charge_states_df['Identification Charge'] = np.tile(np.arange(min_charge, max_charge + 1), len(df_ID))
+    # Iterate through charge states
+    for charge in range(min_charge, max_charge + 1):
+        # Skip if Identification Charge is the same as the iteration
+        if 'Identification Charge' in df_ID and charge == df_ID['Identification Charge'].iloc[0]:
+            continue
+        
+        # Create a DataFrame for the current charge state
+        charge_state_df = df_ID.copy()
 
-    # Copy necessary columns from df_ID to charge_states_df
-    charge_states_df[['Sequence', 'Precursor m/z', 'Peptide Theoretical Mass']] = df_ID[['Sequence', 'Precursor m/z', 'Peptide Theoretical Mass']].values.repeat(max_charge - min_charge + 1, axis=0)
+        # Assign the charge state to the new DataFrame
+        charge_state_df['Identification Charge'] = charge
 
-    # Update Precursor m/z based on Identification Charge
-    charge_states_df['Precursor m/z'] = charge_states_df['Peptide Theoretical Mass'] / charge_states_df['Identification Charge']
+        # Update Precursor m/z based on Identification Charge
+        charge_state_df['Precursor m/z'] = charge_state_df['Peptide Theoretical Mass'] / charge_state_df['Identification Charge']
+
+        # Append the DataFrame to the list
+        dfs_to_concat.append(charge_state_df)
 
     # Concatenate the original df_ID with charge_states_df
-    df_ID = pd.concat([df_ID, charge_states_df], ignore_index=True)
+    df_ID = pd.concat([df_ID] + dfs_to_concat, ignore_index=True)
 
-
-    df_ID.to_csv('ID.csv',sep=',', index=False)
-
+    # Save the resulting DataFrame to a CSV file
+    df_ID.to_csv('ID.csv', sep=',', index=False)
+    
     print('-------------\n[+] Done')
 
 if __name__ == '__main__':
