@@ -38,11 +38,14 @@ args = parser.parse_args()
 #---------------------------------------------Section ends-------------------------------------------------------
 
 def main():
+    
     if args.location:
-
-        where_are_the_files = f'{args.location[0]}'
-        if '\\' in args.location[0]:
-            where_are_the_files = args.location[0].replace('\\', '/')
+        # This is to deal with spaces in the file path
+        if len(args.location) > 1:
+            where_are_the_files = ' '.join(args.location)
+    
+        if '\\' in where_are_the_files:
+            where_are_the_files = where_are_the_files.replace('\\', '/')
     else:
         raise ValueError('Please input a valid path, ex: C:/Desktop/')
     
@@ -73,5 +76,6 @@ def main():
             peaks11_prot_pep_DF.to_csv(f'{where_are_the_files}/DeuteraterReady/peaks11_prot_pept_file.csv',index=False)
     
     print('----------------\n[+] Done')
+    
 if __name__ == '__main__':
     main()
