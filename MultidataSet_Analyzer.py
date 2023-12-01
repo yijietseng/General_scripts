@@ -62,6 +62,14 @@ def mkdir(path):
 
 
 def wget_UniprotID(df):
+    '''
+    Below function was created to scrape data from Uniprot and convert the gene ensemble ID to Uniprot ID.
+    But the chromedriver doesn't seem to work, maybe due to the version or the maybe BYU is blocking it.
+    As far as right now, to convert from the gene emssable ID to the Uniprot ID you will need to use the
+    ID converter on Uniprot or some other sources. 
+    '''
+    
+    
     from selenium import webdriver
     from selenium.webdriver.common.by import By
     from selenium.webdriver.chrome.service import Service
