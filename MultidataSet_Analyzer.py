@@ -58,7 +58,11 @@ FC = np.log2(2)
 def mkdir(path):
     folderls = ['Normalized', 'Stats', 'PVFC', 'VP', 'Ontology_input']
     for folder in folderls:
-        os.makedirs(f'{path}/{folder}', exist_ok=True)
+        if not os.path.exists(f'{path}/{folder}'):
+            os.mkdir(f'{path}/{folder}')
+            print(f'[+] Folder: {path}/{folder} created!!!')
+        else:
+            print(f'[+] Folder: {path}/{folder} exists!!!')
 
 
 def wget_UniprotID(df):
@@ -424,7 +428,7 @@ parser = argparse.ArgumentParser(description='''This script is developd to make 
                                                  Some functions can only be run in PyMOL. ''')
 parser.add_argument('-l',
                     '--location',
-                    nargs=1,
+                    nargs='+',
                     type=str,
                     help='Path to csv data files')
 parser.add_argument('--RNA', 
@@ -441,18 +445,21 @@ args = parser.parse_args()
 
 def main():
     if not args.location:
-        raise ValueError('Please input a valid path, ex: C:/Desktop/')
+        raise ValueError('Please input a valid path, ex: C:/Users/Desktop/')
     # This is to deal with spaces in the file path
     if len(args.location) > 1:
         where_are_the_files = ' '.join(args.location)
     else:
         where_are_the_files = args.location[0]
     if '\\' in where_are_the_files:
-            where_are_the_files = where_are_the_files.replace('\\', '/')  
+            where_are_the_files = where_are_the_files.replace('\\', '/')
+
     # NORMALIZATION AND STATS
-    where_are_the_files = where_are_the_files.rsplit('/', 1)[0]
+    if where_are_the_files[-1] == '/':
+        where_are_the_files = where_are_the_files.rsplit('/', 1)[0]
+
     mkdir(where_are_the_files)
-    
+
     all_file_names = glob.glob(f'{where_are_the_files}/*.csv')
 
     for dataSet in all_file_names:
